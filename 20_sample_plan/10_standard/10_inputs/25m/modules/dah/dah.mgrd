@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SAGA_METADATA>
+  <DATABASE></DATABASE>
+  <SOURCE></SOURCE>
+  <HISTORY saga-version="9.7.0">
+    <TOOL library="ta_morphometry" id="12" name="Diurnal Anisotropic Heat">
+      <OPTION type="grid_system" id="PARAMETERS_GRID_SYSTEM" name="Grid System">
+        <CELLSIZE>25</CELLSIZE>
+        <XMIN>939212.5</XMIN>
+        <YMIN>1054512.5</YMIN>
+        <XMAX>973487.5</XMAX>
+        <YMAX>1092487.5</YMAX>
+      </OPTION>
+      <OPTION type="double" id="ALPHA_MAX" name="Alpha Max (Degree)">202.5</OPTION>
+      <INPUT type="grid" id="DEM" name="Elevation" system="PARAMETERS_GRID_SYSTEM">
+        <TOOL library="ta_preprocessor" id="5" name="Fill Sinks XXL (Wang &amp; Liu)">
+          <OPTION type="grid_system" id="PARAMETERS_GRID_SYSTEM" name="Grid System">
+            <CELLSIZE>25</CELLSIZE>
+            <XMIN>939212.5</XMIN>
+            <YMIN>1054512.5</YMIN>
+            <XMAX>973487.5</XMAX>
+            <YMAX>1092487.5</YMAX>
+          </OPTION>
+          <OPTION type="double" id="MINSLOPE" name="Minimum Slope [Degree]">0.1</OPTION>
+          <INPUT type="grid" id="ELEV" name="DEM" system="PARAMETERS_GRID_SYSTEM"/>
+          <OUTPUT type="grid" id="FILLED" name="Filled DEM">demraw [no sinks]</OUTPUT>
+        </TOOL>
+      </INPUT>
+      <OUTPUT type="grid" id="DAH" name="Diurnal Anisotropic Heating">Diurnal Anisotropic Heating</OUTPUT>
+    </TOOL>
+  </HISTORY>
+  <FILE></FILE>
+  <DESCRIPTION></DESCRIPTION>
+  <PROJECTION>
+    <WKT2>PROJCRS["NAD83_BC_Albers",BASEGEODCRS["GCS_NAD83",DATUM["North_American_Datum_1983",ELLIPSOID["GRS 1980",6378137,298.257222101,LENGTHUNIT["metre",1]],ID["EPSG",6269]],PRIMEM["Greenwich",0,ANGLEUNIT["Degree",0.0174532925199433]]],CONVERSION["unnamed",METHOD["Albers Equal Area",ID["EPSG",9822]],PARAMETER["Latitude of false origin",45,ANGLEUNIT["Degree",0.0174532925199433],ID["EPSG",8821]],PARAMETER["Longitude of false origin",-126,ANGLEUNIT["Degree",0.0174532925199433],ID["EPSG",8822]],PARAMETER["Latitude of 1st standard parallel",50,ANGLEUNIT["Degree",0.0174532925199433],ID["EPSG",8823]],PARAMETER["Latitude of 2nd standard parallel",58.5,ANGLEUNIT["Degree",0.0174532925199433],ID["EPSG",8824]],PARAMETER["Easting at false origin",1000000,LENGTHUNIT["metre",1],ID["EPSG",8826]],PARAMETER["Northing at false origin",0,LENGTHUNIT["metre",1],ID["EPSG",8827]]],CS[Cartesian,2],AXIS["easting",east,ORDER[1],LENGTHUNIT["metre",1,ID["EPSG",9001]]],AXIS["northing",north,ORDER[2],LENGTHUNIT["metre",1,ID["EPSG",9001]]]]</WKT2>
+    <PROJ>+proj=aea +lat_0=45 +lon_0=-126 +lat_1=50 +lat_2=58.5 +x_0=1000000 +y_0=0 +datum=NAD83 +units=m +no_defs +type=crs</PROJ>
+    <CODE>-1</CODE>
+  </PROJECTION>
+</SAGA_METADATA>
