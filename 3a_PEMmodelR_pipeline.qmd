@@ -11,59 +11,341 @@ knitr::opts_chunk$set(
 )
 ```
 
-## 1. Preparing for a new PEM project
+# Overall Model Workflow. 
 
-The PEMr package is designed to help users access the functions and follow a workflow to create a Predictive Ecosystem Map project. The first step in this process is to prepare the basic working layers for an Area of Interest (AOI). This script pulls functions from the PEMprepR portion of the PEMr package. These packages are currently in development and there maybe breaking changes.
+To optimise the accuracy of modelling (and final map) for both forested and non-forested areas with the study area, we use a three part workflow to build the final map. We will build up to three separate components and then assemble the maps. This is required to both improve accuracy and address challenged in which set of covariates can be used to model forest vs non-forest mapunits. 
 
-The first step needed is to generate a new PEM project. This will include a new R-studio project, a template folder structure, and a series of template workflow quarto documents.
+Broadly we will 
+1)  Build a forest / non-forest model and map. This will provide a mask to differentiate areas  between forest and non-forest regions.
 
-## Download the latest development version of the packages
+2) Build a forest model per BGC variant and assemble to a single forested layer. As this is the focus of PEM modelling this modelling component provides the most detailed model build parameters and additional methodology 
 
+3) Build a non-forest model for the entire study area. This methodology is similar to forested workflow and can be replaces with other non-forest mapping products.
+
+
+## Run the forest model
+
+As the forest model is the primary research focus of this mapping process this will be the most detailed and require input in decision making to maximize the accuracy for intended purpose. 
+
+## 1) Prepare training data and required inputs for modelling
+
+The first step is to prepare the training data for the model. This includes the following steps:
+1) convert prepared points to a csv file named training_pts.csv
+2) generate a full covariate list as an RDS object
+
+Note the attribute listed in the prep_tps function should be the attribute within the mapkey to which the raw fieldcalls will be matched. For forested maps this is typically the mapunit_ss_realm, however users can specify their own column if required.
+
+If an error occurs is it worthwhile testing if the min_no is too low and increasing this value. A minimum of 20 appear to be a good starting point.
 ```{r}
 #| eval: false
-remotes::install_github("ninoxconsulting/PEMr", build_vignettes = TRUE)
-remotes::install_github("ninoxconsulting/PEMprepr", build_vignettes = TRUE)
-remotes::install_github("ninoxconsulting/PEMsamplr", build_vignettes = TRUE)
-remotes::install_github("ninoxconsulting/PEMmodelr", build_vignettes = TRUE)
-devtools::load_all("D:\\GitHub\\PEMmodelr_original")
+remotes::install_github("ninoxconsulting/PEMmodelr", ref = "prep_training_data", force = TRUE)
 library(PEMr)
-library(PEMprepr)
-require(PEMsamplr)
 require(PEMmodelr)
+source("./R/utils.R")
 require(tictoc)
-library(tidyverse)
-library(sf)
-library(vip)
-require(terra)
+# library(tidyverse)
+# library(sf)
+# library(vip)
+# require(terra)
 
 ```
 
-### Create folder structure for map project
 
-The first step is to decide on the file path where your mapping projects files will be stored. The choose a name for your map project (area of interest (AOI)). If you supply a spatial file of the map area boundary this will be copiedinto the new project files. Supplying this file not required at this stage but is a convenience feature.
+```{r}
+#| eval: false
+#might want to generate a subfolder here but keeping it at root level for now
+
+out_dir = fs::path(PEMprepr::read_fid()$dir_3020_draft$path_rel, "20_f")
+covarkey = read.csv(fs::path(PEMprepr::read_fid()$dir_30_model$path_rel,"covar_key.csv"))
+
+
+## 1.1 prep all training points
+
+tpts <- PEMmodelr::prep_tps(
+  allpts = sf::st_read(fs::path(PEMprepr::read_fid()$dir_20105030_attributed_field_data$path_rel, "allpoints_att.gpkg")),
+  mapkey = read.csv(fs::path(PEMprepr::read_fid()$dir_30_model$path_abs,"mapunitkey_final.csv")),
+  covarkey = covarkey,
+  attribute = "mapunit_ss_realm",
+  bec = sf::st_read(fs::path(PEMprepr::read_fid()$dir_1010_vector$path_rel, "bec.gpkg")),
+  min_no = 20)
+
+
+## generate a full list of covariates 
+
+core_names  <- covarkey |>
+  dplyr::filter(type == "core") |>
+  dplyr::select(value) |> dplyr::pull()
+
+mcols <- names(tpts)[!names(tpts) %in% c(core_names)]
+saveRDS(mcols, fs::path(out_dir, "full_covariate_list.rds"))
+
+
+# convert training points file to csv
+
+tpts <- cbind(tpts, as.data.frame(sf::st_coordinates(tpts))) |>
+  sf::st_drop_geometry()
+
+mcols <- readRDS(fs::path(out_dir, "full_covariate_list.rds"))
+
+reduced_vars <- reduce_features(mcols,
+                                covar_dir = fs::path(PEMprepr::read_fid()$dir_1020_covariates$path_rel, "5m"),
+                                covarkey = covarkey,
+                                covtype = c("dem"),
+                                cutoff = 0.90)
+
+write.csv(reduced_vars, fs::path(out_dir, "reduced_covariate_list.csv"))
+write.csv(tpts, fs::path(out_dir, "training_pts.csv"), row.names = FALSE)
+#tpts <- read.csv( fs::path(out_dir, "training_pts.csv"))
+tpts <- tpts |> dplyr::filter(!bgc_cat %in% c("ESSFmc", "ESSFmcw"))
+model_bgc <- prep_model_tps(
+  prepped_points = tpts,
+  covars = reduced_vars,
+  model_type = "f",
+  outname = "model_input_pts.rds",
+  out_dir = out_dir
+)
+
+``` 
+
+```{r}
+tune_bgc <- tune_model_params(
+  prepped_points = model_bgc,
+  covars = reduced_vars,
+  min_no = 20,
+  out_dir = out_dir,
+  output_type = "best",
+  accuracy_type = "roc_auc"
+)
+
+```
 
 ```{r}
 #| eval: false
 
-  path = "D:/PEM_AOIs"
-  aoi_name = "Deception_Lake_original"
-  #aoi_file = "D:/GitHub/PEM_pipeline/deception_aoi.gpkg"
-  open=FALSE
-  fid <- read_fid()
-  model_input = read_fid()$dir_3010_inputs$path_abs
-training_input = read_fid()$dir_1030_training_data$path_abs
+# designate the directory
+out_dir = fs::path(PEMprepr::read_fid()$dir_3020_draft$path_rel, "20_f")
+
+# read in data
+bgc_pts_subzone <- readRDS(fs::path(out_dir, "model_input_pts.rds"))
+
+# read in fuzzy matrix
+fuzz_matrix <- read.csv(file.path(out_dir, "fuzzy_matrix.csv" )) |>
+  dplyr::select(target, Pred, fVal)
+
+# read in reduced covariate list 
+covars = read.csv(fs::path(out_dir, "reduced_covariate_list.csv")) |> dplyr::pull()
+
+
+## Run base model
+run_base_model(
+  bgc_pts_subzone = bgc_pts_subzone,
+  fuzz_matrix = fuzz_matrix,
+  covars = covars,
+  use_neighbours = FALSE,
+  detailed_output = TRUE,
+  out_dir = out_dir)
+
+```
+```{r}
+#| eval: false
+
+out_dir = fs::path(PEMprepr::read_fid()$dir_3020_draft$path_rel, "20_f")
+train_data <- readRDS(fs::path(out_dir, "model_input_pts.rds"))
+covars <- read.csv(fs::path(out_dir, "reduced_covariate_list.csv")) |> dplyr::pull()
+
+final_mod <- run_final_model(train_data,
+                             covars,
+                             model_bal = "base",
+                             report = FALSE,
+                             out_dir = out_dir)
+
+```
+
+
+```{r}
+#| eval: false
+
+model_dir = fs::path(PEMprepr::read_fid()$dir_3020_draft$path_rel, "20_f")
+covars = read.csv(fs::path(model_dir, "reduced_covariate_list.csv")) |>  dplyr::pull()
+cov_dir = fs::path(PEMprepr::read_fid()$dir_1020_covariates$path_rel, "5m")
+tile_dir = fs::path(PEMprepr::read_fid()$dir_30_model$path_rel,"tiles")
+bec_shp <- sf::st_read(fs::path(PEMprepr::read_fid()$dir_1010_vector$path_rel,"bec.gpkg"), quiet = TRUE)
+
+run_predict_map(
+  model_type = "f",
+  model_dir = model_dir,
+  model_name = "final_model_base.rds",
+  covars = covars,
+  cov_dir = cov_dir,
+  tile_dir = tile_dir,
+  bec_shp = bec_shp
+)
+
+```
+
+##### OLD ######
+```{r}
+#| eval: false
+#might want to generate a subfolder here but keeping it at root level for now
+
+# out_dir = fs::path(PEMprepr::read_fid()$dir_3020_draft$path_rel, "20_f")
+# cov.key <- PEMprepr::read_fid()$dir_30_model$path_abs
+covarkey = read.csv(file.path(PEMprepr::read_fid()$dir_30_model$path_rel,"covar_key.csv"))
+
+
+#generate_covar_key(allpts, overwrite = TRUE)
+
+## 1.1 prep all training points
+
+tpts <- PEMmodelr::prep_tps(
+  allpts = sf::st_read(fs::path(PEMprepr::read_fid()$dir_20105030_attributed_field_data$path_rel, "allpoints_att.gpkg")),
+  mapkey = read.csv(fs::path(PEMprepr::read_fid()$dir_30_model$path_abs,"mapunitkey_final.csv")),
+  covarkey = covarkey,
+  attribute = "mapunit_ss_realm",
+  bec = sf::st_read(fs::path(PEMprepr::read_fid()$dir_1010_vector$path_rel, "bec.gpkg")),
+  min_no = 20)
+
+
+## generate a full list of covariates 
+
+core_names  <- covarkey |>
+  dplyr::filter(type == "core") |>
+  dplyr::select(value) |> dplyr::pull()
+
+mcols <- names(tpts)[!names(tpts) %in% c(core_names)]
+saveRDS(mcols, fs::path(out_dir, "full_covariate_list.rds"))
+
+
+# convert training points file to csv
+
+tpts <- cbind(tpts, as.data.frame(sf::st_coordinates(tpts))) |>
+  sf::st_drop_geometry()
+
+write.csv(tpts, fs::path(out_dir, "training_pts.csv"), row.names = FALSE)
+
+```
+fuzzy matrix
+```{r}
+#| eval: false
+#| 
+# this is currently a placeholder that Claire is working on.
+# it is possible to use the existing fuzzy_matrix.csv files until this is completed
+
+#fuzzy_matrix <- read.csv(fs::path("fuzzy_matrix.csv" ))
+model_input = read_fid()$dir_3010_inputs$path_abs
+fuzzy_matrix <- read.csv(file.path(model_input, "fuzzy_matrix_basic_updated.csv" ))%>%
+  dplyr::select(target, Pred, fVal)
+utils::write.csv(fuzzy_matrix, fs::path(out_dir, "fuzzy_matrix.csv"), row.names = FALSE)
+
+```
+
+```{r}
+#| eval: false
+
+tpts <- read.csv( fs::path(out_dir, "training_pts.csv")) 
+reduced_vars <- read.csv(file.path(model_input,  "reduced_covariate_list_dem_only.csv")) %>% dplyr::pull()
+model_bgc <- prep_model_tps(
+  prepped_points = tpts,
+  covars = reduced_vars,
+  model_type = "f",
+  outname = "model_input_pts.rds",
+  out_dir = out_dir
+)
+
+tune_bgc <- tune_model_params(
+  prepped_points = model_bgc,
+  covars = reduced_vars,
+  min_no = 20,
+  out_dir = out_dir,
+  output_type = "best",
+  accuracy_type = "roc_auc"
+)
+
+
+```
+
+## 2) Run the base model
+
+
+The model framework is based on an iterative leave-one-out process in which the accuracy estimates are generate by holding out one part of the data and then building and predicting with the other portion. Accuracy results are generated for each slice and uncertainty is estimated for the entire model. 
+Accuracy is based on iteration by slice, or by site, where slice numbers are low. 
+The rational for this is to reduce the need for a separate QA, and to improve uncertainty estimates of predictions. Each slice represents similar hypercube “space” and contains approximately 5 sites. For example stage 1 SBSmc2 at Deception includes 5 slices each with 5 sites = 25 sites or 50 triangles in total. 
+
+This provides; 
+1) confidence intervals around accuracy measures (based on 5 slices), 
+2) minimize “data leakage” between the test and training sets, 
+3) enables sites to be “blocked” to training and testing sets to prevent the model from training and testing on data from the same site (ie pair of transects). Cross validation is stratified by mapunit and grouped by site id. Test results are reported below.
+4) To ensure an accurate assessment we calculate the average weighted means and standard deviation based on the number of transects per slice. This accounts for sampling structure where there are uneven number of sites per slice. 
+
+
+The first step in model development is running a basic model where no balancing has been applied to the training points. This can provide a basic output, and can also be used to compare the impact of balancing to the basic model. The neighbors designates whether neighboring cells should be included in the model build. Detailed_outputs is not needed in this section, however will be used to calculate theta metrics in the next section. This model will generate a full accuracy assessment using the slices testing and training leave one out method as described above.   
+
+
+```{r}
+#| eval: false
+
+tpts <- read.csv( fs::path(out_dir, "training_pts.csv")) #%>% mutate_if(is.character, as.factor)
+
+model_bgc <- prep_model_tps(
+  prepped_points = tpts,
+  covars = reduced_vars,
+  model_type = "f",
+  outname = "model_input_pts.rds",
+  out_dir = out_dir)
+
+# designate the directory
+out_dir = fs::path(PEMprepr::read_fid()$dir_3020_draft$path_rel, "20_f")
+
+# read in data
+bgc_pts_subzone <- readRDS(fs::path(out_dir, "model_input_pts.rds"))
+
+# read in fuzzy matrix
+fuzz_matrix <- read.csv(file.path(out_dir, "fuzzy_matrix.csv" )) |>
+  dplyr::select(target, Pred, fVal)
+
+# read in reduced covariate list 
+
+covars <- read.csv(file.path(model_input,  "reduced_covariate_list_dem_only.csv")) %>% dplyr::pull()
+# covars = read.csv(fs::path(out_dir, "reduced_covariate_list_dem_only.csv")) |> dplyr::pull()
+
+
+## Run base model
+run_base_model(
+  bgc_pts_subzone = bgc_pts_subzone,
+  fuzz_matrix = fuzz_matrix,
+  covars = covars,
+  use_neighbours = FALSE,
+  detailed_output = TRUE,
+  out_dir = out_dir)
+
+```
+
+
+
+
+```{r}
+#| eval: false
+
+#   path = "E:/PEM_AOIs"
+#   aoi_name = "Deception_Lake"
+#   #aoi_file = "D:/GitHub/PEM_pipeline/deception_aoi.gpkg"
+#   open=FALSE
+#   fid <- read_fid()
+#   model_input = read_fid()$dir_3010_inputs$path_abs
+# training_input = read_fid()$dir_1030_training_data$path_abs
 ```
 
 # read in model parameters
 ```{r, eval = FALSE}
 
-fmat <- read.csv(file.path(model_input, "fuzzy_matrix_basic_updated.csv" ))%>%
-  dplyr::select(target, Pred, fVal)
+# fmat <- read.csv(file.path(model_input, "fuzzy_matrix_basic_updated.csv" ))%>%
+#   dplyr::select(target, Pred, fVal)
 # select reduced variables
 reduced_vars <- read.csv(file.path(model_input,  "reduced_covariate_list_dem_only.csv")) %>% dplyr::pull()
 nonfor_vars <- read.csv(file.path(model_input,  "reduced_covariate_list.csv")) %>% dplyr::pull()
 
 bgc_pts_subzone <- readRDS(file.path(training_input, "model_input_pts.rds"))
+
 extra_data <- readRDS(file.path(training_input, "extra_training_all.rds"))
 best_tune <- fread(file.path(model_input, "best_tuning_dem_only.csv"))
 mtry <- best_tune$mtry

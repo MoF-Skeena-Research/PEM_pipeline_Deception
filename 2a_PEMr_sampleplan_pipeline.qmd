@@ -101,7 +101,7 @@ bec_rast25 <- create_bgc_template(
 
 create_landscape_covariates(
   dtm = dem25,
-  saga_path = saga_cmd(),
+  saga_path = saga_cmd("C:/SAGA/saga_cmd.exe"),
   layers = c("mrvbf", "dah", "landform"),
   out_dir = PEMprepr::read_fid()$dir_201010_inputs$path_abs,
   sieve_size = 10,
@@ -114,81 +114,6 @@ create_landscape_covariates(
   
 ```
 
-```{r, eval = FALSE}
-
-# # vector (aoi, roads and start points)
-# 
-# in_dir = read_fid()$dir_1010_vector$path_abs
-# aoi_file = file.path(in_dir, "aoi_snapped.gpkg" )
-# 
-# out_dir <- read_fid()$dir_201010_inputs$path_abs
-# 
-# 
-# aoils <- snap_aoi(aoi_file, method = "expand", buffer = 1000, write_output = FALSE)
-# 
-# sf::st_write(aoils, file.path(out_dir, "aoi_snapped_ls.gpkg"), append = FALSE)
-# 
-# 
-# 
-# # Prepare Raster Data (for landscape)
-# 
-# r25 <- create_template_raster(aoils,
-#                               res = 25,
-#                               out_dir = read_fid()$dir_201010_inputs$path_abs,
-#                               write_output = TRUE)
-# 
-# 
-# dem25 = get_cded_dem(aoi = r25,
-#                      res = 25,
-#                      out_dir = read_fid()$dir_201010_inputs$path_abs,
-#                      write_output = TRUE, overwrite = TRUE)
-# 
-
-
-# generate a 25m raster
-# 
-# bec_rast25 <- create_bgc_template(
-#   field = "MAP_LABEL",
-#   template_rast =  r25,
-#   out_dir = read_fid()$dir_201010_inputs$path_abs,
-#   write_output = TRUE
-# )
-# 
-# 
-# 
-# # Generate landscape covariates
-# saga_cmd("C:/SAGA/saga_cmd.exe")
-# create_landscape_covariates(
-#   dtm = dem25,
-#   saga_path = saga_cmd(),
-#   layers = c("mrvbf", "dah", "landform"),
-#   out_dir = read_fid()$dir_201010_inputs$path_abs,
-#   sieve_size = 10,
-#   dah_threshold = 0.2,
-#   saga_param = list(
-#     T_SLOPE = 64, TPCTL_V = 6, T_PCTL_R = 2,
-#     P_SLOPE = 4.0, P_PCTL = 3.0, UPDATE = 1,
-#     CLASSIFY = 1, MAX_RES = 100
-#   ))
-# 
-
-#| eval: false
-# Generate landscape covariates
-
-create_landscape_covariates(
-  dtm = dem25,
-  saga_path = saga_cmd(),
-  layers = c("mrvbf", "dah", "landform"),
-  out_dir = PEMprepr::read_fid()$dir_201010_inputs$path_abs,
-  sieve_size = 10,
-  dah_threshold = 0.2,
-  saga_param = list(
-    T_SLOPE = 64, TPCTL_V = 6, T_PCTL_R = 2,
-    P_SLOPE = 4.0, P_PCTL = 3.0, UPDATE = 1,
-    CLASSIFY = 1, MAX_RES = 100
-  ))
-  
-```
 
 ```{r}
 # create binned landscape
@@ -199,18 +124,11 @@ landscapes <- create_binned_landscape(
 
 terra::plot(landscapes)
 
-```
-
-```{r}
-#| eval: false
-# check landscape class with Bec
-
 routdf <- check_bgc_landscapes(bec_rast25, landscapes)
 
 ggplot2::ggplot(routdf, ggplot2::aes(landscape)) +
   ggplot2::geom_histogram() +
   ggplot2::facet_wrap(~MAP_LABEL)
-
 ```
 
 ```{r}
